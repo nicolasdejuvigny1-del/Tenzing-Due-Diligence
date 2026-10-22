@@ -2,7 +2,7 @@
 Tenzing
 From a French startup name to a one-page investment memo, using public sources only.
 Sources: API Recherche d'entreprises (SIRENE, data.gouv.fr), company website, Google News RSS.
-LLM: Groq 
+LLM: Groq (default, free plan), Mistral AI or Anthropic Claude.
 """
 
 import base64
@@ -145,6 +145,9 @@ d'investissement préliminaire d'UNE page, à partir des seules sources fournies
 
 Règles :
 - N'invente aucun chiffre, aucun nom, aucun fait. Si une information manque, écris-le.
+- Ne traduis jamais un code NAF en libellé d'activité : recopie le code tel quel.
+- N'ajoute aucune donnée absente des sources (forme juridique, capital, chiffre d'affaires, clients).
+- Un chiffre issu d'un titre de presse [S3] est toujours présenté comme « selon la presse, non vérifié ».
 - Distingue clairement les FAITS (sourcés [S1], [S2]...) des HYPOTHÈSES (préfixées "Hypothèse :").
 - Style : sobre, précis, orienté décision. Pas de superlatifs marketing.
 
@@ -614,6 +617,7 @@ bar_l, bar_r = st.columns([5, 1])
 bar_l.markdown('<div class="brand">Tenzing</div>', unsafe_allow_html=True)
 lang = bar_r.radio("Language", ["FR", "EN"], horizontal=True, label_visibility="collapsed").lower()
 t = T[lang]
+
 # Hero (video)
 video_block("hero.mp4", "hero_poster.jpg",
             f"""<div class="eyebrow">{t['eyebrow']}</div><h1>Tenzing</h1>
@@ -725,5 +729,5 @@ if st.session_state.get("memo"):
 st.markdown(f"""
 <div class="foot">
   <span>{t['disclaimer']} {t['sources']}</span>
-  <span>Nicolas Leonard de Juvigny · <a href="https://linkedin.com/in/nicolasjuvigny">LinkedIn</a></span>
+  <span>Nicolas Juvigny · <a href="https://linkedin.com/in/nicolasjuvigny">LinkedIn</a></span>
 </div>""", unsafe_allow_html=True)

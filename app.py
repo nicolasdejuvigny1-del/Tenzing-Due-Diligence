@@ -614,13 +614,6 @@ bar_l, bar_r = st.columns([5, 1])
 bar_l.markdown('<div class="brand">Tenzing</div>', unsafe_allow_html=True)
 lang = bar_r.radio("Language", ["FR", "EN"], horizontal=True, label_visibility="collapsed").lower()
 t = T[lang]
-for _img in ("hero.jpg", "ridge.jpg"):
-    if not find_image(_img):
-        st.warning(f"Image introuvable : {_img}. Ajoutez-la dans le dossier assets/ du dépôt GitHub.")
-for _vid in ("hero.mp4", "ridge.mp4"):
-    if not (ROOT / "static" / _vid).exists():
-        st.warning(f"Vidéo introuvable : static/{_vid}. Ajoutez-la dans le dossier static/ du dépôt GitHub.")
-
 # Hero (video)
 video_block("hero.mp4", "hero_poster.jpg",
             f"""<div class="eyebrow">{t['eyebrow']}</div><h1>Tenzing</h1>

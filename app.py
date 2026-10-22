@@ -5,6 +5,7 @@ Sources: API Recherche d'entreprises (SIRENE, data.gouv.fr), company website, Go
 LLM: Mistral AI (default, free Experiment plan) or Anthropic Claude.
 """
 
+import time
 import xml.etree.ElementTree as ET
 from datetime import date
 
@@ -76,7 +77,7 @@ def company_profile(c: dict) -> dict:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_website(url: str, max_chars: int = 6000) -> str:
+def fetch_website(url: str, max_chars: int = 3500) -> str:
     if not url:
         return ""
     if not url.startswith("http"):
@@ -160,16 +161,22 @@ def generate_memo(provider: str, api_key: str, context: str, language: str) -> s
     system = SYSTEM_PROMPT + f"\nLangue de rédaction : {language}."
     user = f"Sources disponibles :\n\n{context}\n\nRédige la note."
     if provider == "Mistral":
-        r = requests.post(
-            MISTRAL_API,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": MISTRAL_MODEL, "max_tokens": 2500, "temperature": 0.2,
-                  "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
-            timeout=120,
-        )
-        if r.status_code != 200:
-            raise RuntimeError(f"Mistral {r.status_code} : {r.text[:300]}")
-        return r.json()["choices"][0]["message"]["content"]
+        payload = {"model": MISTRAL_MODEL, "max_tokens": 1800, "temperature": 0.2,
+                   "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        # Free plan = low rate limits: retry automatically on 429 with increasing waits.
+        for wait in (5, 15, 30, None):
+            r = requests.post(MISTRAL_API, headers=headers, json=payload, timeout=120)
+            if r.status_code == 200:
+                return r.json()["choices"][0]["message"]["content"]
+            if r.status_code != 429 or wait is None:
+                break
+            retry_after = r.headers.get("Retry-After")
+            time.sleep(int(retry_after) if retry_after and retry_after.isdigit() else wait)
+        if r.status_code == 429:
+            raise RuntimeError("le quota gratuit de Mistral est momentanément atteint. "
+                               "Patiente une minute, puis relance la génération.")
+        raise RuntimeError(f"Mistral {r.status_code} : {r.text[:300]}")
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(model=CLAUDE_MODEL, max_tokens=2500, system=system,
@@ -235,7 +242,7 @@ if results:
         with st.spinner("Collecte du site et de la presse..."):
             website = fetch_website(url)
             news = fetch_news(profile["Dénomination"] or name)
-        with st.spinner("Rédaction de la note..."):
+        with st.spinner("Rédaction de la note (jusqu'à 1 minute avec l'offre gratuite)..."):
             try:
                 memo = generate_memo(provider, api_key, build_context(profile, website, news), language)
             except Exception as e:

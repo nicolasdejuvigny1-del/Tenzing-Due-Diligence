@@ -70,5 +70,5 @@ Mountain photographs © Nicolas Leonard de Juvigny.
 
 ## Author
 
-**Nicolas Leonard de Juvigny** — Strategy consultant, INSEAD · CELSA
+**Nicolas Juvigny** — Strategy consultant, INSEAD · CELSA
 [LinkedIn](https://linkedin.com/in/nicolasjuvigny)

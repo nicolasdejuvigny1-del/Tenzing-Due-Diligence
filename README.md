@@ -4,7 +4,7 @@
 
 *Named after Tenzing Norgay, the Sherpa who reached the summit of Everest with Edmund Hillary in 1953. Before any ascent, someone has to scout the route.*
 
-[▶️ Live demo]([LIEN_STREAMLIT_A_COMPLETER](https://tenzing-due-diligence.streamlit.app/#analysis)) · Built with Python, Streamlit and open-weight LLMs
+[▶️ Live demo](https://tenzing-due-diligence.streamlit.app/#analysis)) · Built with Python, Streamlit and open-weight LLMs
 
 ![Screenshot](screenshot.png)
 

@@ -1,4 +1,5 @@
-streamlit>=1.36
-requests>=2.31
-beautifulsoup4>=4.12
-anthropic>=0.40
+   streamlit>=1.36
+   requests>=2.31
+   beautifulsoup4>=4.12
+   anthropic>=0.40
+   reportlab>=4.0

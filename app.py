@@ -2,10 +2,12 @@
 Tenzing
 From a French startup name to a one-page investment memo, using public sources only.
 Sources: API Recherche d'entreprises (SIRENE, data.gouv.fr), company website, Google News RSS.
-LLM: Groq (default, free plan), Mistral AI or Anthropic Claude.
+LLM: Groq 
 """
 
 import base64
+import io
+import re
 import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -13,6 +15,7 @@ from datetime import date
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from bs4 import BeautifulSoup
 
 SIRENE_API = "https://recherche-entreprises.api.gouv.fr/search"
@@ -209,10 +212,23 @@ def generate_memo(provider: str, api_key: str, context: str, language: str) -> s
 ASSETS = Path(__file__).parent / "assets"
 
 
+ROOT = Path(__file__).parent
+
+
+def find_image(name: str) -> Path | None:
+    """Look in assets/ first, then the repo root, ignoring upper/lower case."""
+    for folder in (ASSETS, ROOT):
+        if folder.is_dir():
+            for f in folder.iterdir():
+                if f.name.lower() == name.lower():
+                    return f
+    return None
+
+
 @st.cache_data(show_spinner=False)
 def img_b64(name: str) -> str:
-    path = ASSETS / name
-    return base64.b64encode(path.read_bytes()).decode() if path.exists() else ""
+    path = find_image(name)
+    return base64.b64encode(path.read_bytes()).decode() if path else ""
 
 
 T = {
@@ -243,7 +259,10 @@ T = {
         "needkey": "Renseignez une clé API dans les paramètres avancés pour générer la note.",
         "climb": ["Camp de base", "Camp I", "Camp II", "Sommet"],
         "climb_sub": ["Registre", "Site web", "Presse", "Note"],
-        "memo": "Note d'investissement", "download": "Télécharger la note (.md)",
+        "memo": "Note d'investissement", "download": "Markdown (.md)",
+        "download_pdf": "Télécharger le PDF", "pdf_label": "Note d'investissement préliminaire",
+        "pdf_foot": "Tenzing · Sources publiques (SIRENE, site web, presse) · Ne constitue pas un conseil en investissement",
+        "pdf_created": "Création", "pdf_staff": "Effectif", "pdf_hq": "Siège", "pdf_date": "Note du",
         "press": "Sources presse [S3]",
         "err_api": "Erreur API SIRENE", "err_engine": "Erreur du moteur",
         "noresult": "Aucune entreprise trouvée pour ce nom.",
@@ -279,7 +298,10 @@ T = {
         "needkey": "Enter an API key in the advanced settings to generate the memo.",
         "climb": ["Base camp", "Camp I", "Camp II", "Summit"],
         "climb_sub": ["Register", "Website", "Press", "Memo"],
-        "memo": "Investment memo", "download": "Download the memo (.md)",
+        "memo": "Investment memo", "download": "Markdown (.md)",
+        "download_pdf": "Download PDF", "pdf_label": "Preliminary investment memo",
+        "pdf_foot": "Tenzing · Public sources (SIRENE, website, press) · Not investment advice",
+        "pdf_created": "Incorporated", "pdf_staff": "Headcount", "pdf_hq": "Head office", "pdf_date": "Memo dated",
         "press": "Press sources [S3]",
         "err_api": "SIRENE API error", "err_engine": "Engine error",
         "noresult": "No company found for this name.",
@@ -302,19 +324,28 @@ html, body, .stApp, [data-testid="stAppViewContainer"] { background:var(--ink); 
 h1,h2,h3,h4, .serif { font-family:'Cormorant Garamond',serif !important; font-weight:500 !important; letter-spacing:.01em; }
 #MainMenu, footer, [data-testid="stDecoration"], [data-testid="stSidebarCollapsedControl"] { display:none !important; }
 header[data-testid="stHeader"] { background:transparent; }
-.block-container { padding-top:1rem; max-width:1180px; }
+.block-container { padding-top:1rem; max-width:1320px; }
+iframe { border:0 !important; display:block; }
 a { color:var(--paper) !important; }
 
 /* top bar */
 .brand { font-family:'Cormorant Garamond',serif; font-size:1.35rem; letter-spacing:.42em; text-transform:uppercase; }
 
 /* hero */
-.hero { position:relative; min-height:78vh; border-radius:2px; overflow:hidden; display:flex; align-items:flex-end;
-        background-size:cover; background-position:center 35%; animation:zoom 22s ease-out both; }
-@keyframes zoom { from { background-size:112%; } to { background-size:100%; } }
+.stApp { overflow-x:hidden; }
+.hero { position:relative; width:100vw; margin-left:calc(50% - 50vw); min-height:88vh; overflow:hidden;
+        display:flex; align-items:flex-end; background-color:#111; }
+.hero-bg { position:absolute; inset:-4%; background-size:cover; background-position:center 30%;
+           animation:kenburns 26s ease-out both; }
+@keyframes kenburns { from { transform:scale(1.14) translateY(2%); } to { transform:scale(1) translateY(0); } }
+.hero-mist { position:absolute; inset:0; pointer-events:none; opacity:.55;
+             background:radial-gradient(ellipse 60% 30% at 20% 70%,rgba(255,255,255,.18),transparent 70%),
+                        radial-gradient(ellipse 50% 25% at 80% 60%,rgba(255,255,255,.14),transparent 70%);
+             animation:drift 18s ease-in-out infinite alternate; }
+@keyframes drift { from { transform:translateX(-4%); } to { transform:translateX(4%); } }
 .hero::after { content:""; position:absolute; inset:0;
-               background:linear-gradient(180deg,rgba(11,11,11,.15) 0%,rgba(11,11,11,.35) 45%,rgba(11,11,11,.96) 100%); }
-.hero-inner { position:relative; z-index:2; padding:0 4.5vw 7vh; max-width:880px; animation:rise 1.4s ease-out both; }
+               background:linear-gradient(180deg,rgba(11,11,11,.05) 0%,rgba(11,11,11,.10) 40%,rgba(11,11,11,.75) 78%,#0b0b0b 100%); }
+.hero-inner { position:relative; z-index:2; padding:0 6vw 9vh; max-width:880px; animation:rise 1.4s ease-out both; }
 @keyframes rise { from { opacity:0; transform:translateY(24px);} to { opacity:1; transform:none;} }
 .eyebrow { font-size:.72rem; letter-spacing:.32em; text-transform:uppercase; color:#cfcfcf; margin-bottom:1rem; }
 .hero h1 { font-size:clamp(3.4rem,9vw,7.5rem); line-height:.95; margin:0 0 1.2rem; color:#fff; }
@@ -332,9 +363,9 @@ a { color:var(--paper) !important; }
 .step h3 { font-size:1.6rem; margin:.6rem 0 .5rem; }
 .step p { color:#bdbdbd; font-weight:300; line-height:1.65; font-size:.95rem; }
 
-.band { position:relative; height:46vh; margin:4.5rem 0 0; background-size:cover; background-position:center;
-        background-attachment:fixed; display:flex; align-items:center; justify-content:center; text-align:center; }
-.band::after { content:""; position:absolute; inset:0; background:rgba(11,11,11,.55); }
+.band { position:relative; height:58vh; width:100vw; margin:4.5rem 0 0 calc(50% - 50vw); background-size:cover;
+        background-position:center 40%; background-attachment:fixed; display:flex; align-items:center; justify-content:center; text-align:center; }
+.band::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,#0b0b0b 0%,rgba(11,11,11,.35) 25%,rgba(11,11,11,.45) 75%,#0b0b0b 100%); }
 .band div { position:relative; z-index:2; padding:0 6vw; }
 .band blockquote { font-family:'Cormorant Garamond',serif; font-size:clamp(1.6rem,3.4vw,2.7rem); font-style:italic;
                    color:#fff; margin:0 0 .8rem; border:none; }
@@ -384,6 +415,197 @@ def climb_html(t: dict, current: int) -> str:
 
 
 # ----------------------------------------------------------------------------
+# PDF export (1-2 pages, black & white, A4)
+# ----------------------------------------------------------------------------
+PDF_CHARS = {"→": "->", "←": "<-", "≈": "~", "≥": ">=", "≤": "<=", "✓": "-", "✔": "-", "✗": "x",
+             "▪": "•", "●": "•", "◦": "-", "‑": "-", " ": " ", " ": " ", " ": " "}
+
+
+def pdf_safe(text: str) -> str:
+    text = "".join(PDF_CHARS.get(c, c) for c in text)
+    return "".join(c if c.encode("cp1252", "ignore") else "" for c in text)
+
+
+def md_inline(text: str) -> str:
+    text = pdf_safe(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", text)
+    return text.replace("`", "")
+
+
+def build_pdf(memo: str, profile: dict, t: dict) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+
+    W, H = A4
+    hero = find_image("hero.jpg")
+    band_h = 40 * mm
+    company = pdf_safe(str(profile.get("Dénomination") or ""))
+    meta = " · ".join(x for x in [f"SIREN {profile.get('SIREN')}" if profile.get("SIREN") else "",
+                                  f"NAF {profile.get('Code NAF')}" if profile.get("Code NAF") else "",
+                                  f"{t['pdf_date']} {date.today().strftime('%d/%m/%Y')}"] if x)
+
+    def first_page(c, doc):
+        if hero:
+            img = ImageReader(str(hero))
+            iw, ih = img.getSize()
+            draw_h = W * ih / iw
+            c.saveState()
+            p = c.beginPath(); p.rect(0, H - band_h, W, band_h); c.clipPath(p, stroke=0, fill=0)
+            c.drawImage(img, 0, H - band_h - draw_h * 0.10, W, draw_h)  # show the dark lower ridges
+            c.setFillColor(colors.black); c.setFillAlpha(.28); c.rect(0, H - band_h, W, band_h, stroke=0, fill=1)
+            c.restoreState()
+        else:
+            c.setFillColor(colors.black); c.rect(0, H - band_h, W, band_h, stroke=0, fill=1)
+        c.setFillColor(colors.white)
+        c.setFont("Times-Roman", 22); c.drawString(16 * mm, H - band_h + 9 * mm, "T E N Z I N G")
+        c.setFont("Helvetica", 6.5); c.drawString(16 * mm, H - band_h + 5 * mm, pdf_safe(t["eyebrow"]).upper())
+        later_pages(c, doc)
+
+    def later_pages(c, doc):
+        c.setStrokeColor(colors.HexColor("#bbbbbb")); c.setLineWidth(.4)
+        c.line(16 * mm, 12 * mm, W - 16 * mm, 12 * mm)
+        c.setFillColor(colors.HexColor("#666666")); c.setFont("Helvetica", 6.5)
+        c.drawString(16 * mm, 8 * mm, pdf_safe(t["pdf_foot"]))
+        c.drawRightString(W - 16 * mm, 8 * mm, f"{doc.page}")
+
+    def story(size: float):
+        lead = size * 1.32
+        body = ParagraphStyle("b", fontName="Helvetica", fontSize=size, leading=lead, alignment=TA_LEFT,
+                              textColor=colors.HexColor("#111111"), spaceAfter=size * .35)
+        bullet = ParagraphStyle("li", parent=body, leftIndent=11, bulletIndent=2, spaceAfter=size * .2)
+        h2 = ParagraphStyle("h2", fontName="Times-Bold", fontSize=size * 1.32, leading=size * 1.6,
+                            spaceBefore=size * .9, spaceAfter=size * .3, textColor=colors.black)
+        label = ParagraphStyle("lab", fontName="Helvetica", fontSize=6.8, leading=9, textColor=colors.HexColor("#777777"))
+        title = ParagraphStyle("ti", fontName="Times-Roman", fontSize=21, leading=24, textColor=colors.black)
+        small = ParagraphStyle("sm", fontName="Helvetica", fontSize=7.4, leading=9.5, textColor=colors.HexColor("#444444"))
+
+        out = [Paragraph(md_inline(t["pdf_label"]).upper(), label), Spacer(1, 2),
+               Paragraph(md_inline(company or "-"), title), Paragraph(md_inline(meta), small), Spacer(1, 6)]
+        facts = [[t["pdf_created"], "Statut" if t["memo_lang"] == "français" else "Status", t["pdf_staff"], t["pdf_hq"]],
+                 [str(profile.get("Date de création") or "-"), str(profile.get("Statut") or "-"),
+                  str(profile.get("Effectif (tranche INSEE)") or "-"), str(profile.get("Siège") or "-")]]
+        facts = [[Paragraph(md_inline(x).upper() if r == 0 else md_inline(x), label if r == 0 else small)
+                  for x in row] for r, row in enumerate(facts)]
+        ft = Table(facts, colWidths=[28 * mm, 26 * mm, 30 * mm, None])
+        ft.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, 0), .8, colors.black),
+                                ("LINEBELOW", (0, -1), (-1, -1), .4, colors.HexColor("#999999")),
+                                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                                ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+        out += [ft, Spacer(1, 4)]
+
+        lines, i = memo.splitlines(), 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.startswith("|"):  # markdown table
+                rows = []
+                while i < len(lines) and lines[i].strip().startswith("|"):
+                    cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                    if not all(re.fullmatch(r":?-{2,}:?", c) for c in cells if c):
+                        rows.append([Paragraph(md_inline(c), small) for c in cells])
+                    i += 1
+                if rows:
+                    n = max(len(r) for r in rows)
+                    rows = [r + [""] * (n - len(r)) for r in rows]
+                    tb = Table(rows, colWidths=[(W - 32 * mm) / n] * n)
+                    tb.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), .3, colors.HexColor("#cccccc")),
+                                            ("LINEABOVE", (0, 0), (-1, 0), .8, colors.black),
+                                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                                            ("TOPPADDING", (0, 0), (-1, -1), 2),
+                                            ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
+                    out += [tb, Spacer(1, 4)]
+                continue
+            i += 1
+            if not line or re.fullmatch(r"[-*_]{3,}", line):
+                continue
+            if line.startswith("#"):
+                out.append(Paragraph(md_inline(line.lstrip("#").strip()), h2))
+            elif re.match(r"^[-*•]\s+", line):
+                out.append(Paragraph(md_inline(re.sub(r"^[-*•]\s+", "", line)), bullet, bulletText="•"))
+            elif re.match(r"^\d+[.)]\s+", line):
+                num = re.match(r"^(\d+)", line).group(1)
+                out.append(Paragraph(md_inline(re.sub(r"^\d+[.)]\s+", "", line)), bullet, bulletText=f"{num}."))
+            else:
+                out.append(Paragraph(md_inline(line), body))
+        return out
+
+    from reportlab.platypus import BaseDocTemplate, Frame, NextPageTemplate, PageTemplate
+
+    pdf = b""
+    for size in (9.0, 8.3, 7.7, 7.2):  # shrink until the memo fits on 2 pages
+        buf = io.BytesIO()
+        pages = []
+        doc = BaseDocTemplate(buf, pagesize=A4, title=f"Tenzing - {company}", author="Tenzing")
+        m, bottom = 16 * mm, 17 * mm
+        first = Frame(m, bottom, W - 2 * m, H - band_h - 7 * mm - bottom, id="first")
+        rest = Frame(m, bottom, W - 2 * m, H - 16 * mm - bottom, id="rest")
+        doc.addPageTemplates([
+            PageTemplate("first", [first], onPage=lambda c, d: (pages.append(d.page), first_page(c, d))),
+            PageTemplate("rest", [rest], onPage=lambda c, d: (pages.append(d.page), later_pages(c, d))),
+        ])
+        doc.build([NextPageTemplate("rest")] + story(size))
+        pdf = buf.getvalue()
+        if len(pages) <= 2:
+            break
+    return pdf
+
+
+# ----------------------------------------------------------------------------
+# Cinematic video blocks (videos served from static/, photo shown as poster/fallback)
+# ----------------------------------------------------------------------------
+# Public GitHub repo: jsDelivr serves its files with the right video type (Streamlit serves .mp4 as text).
+GITHUB_REPO = "nicolasdejuvigny1-del/Tenzing-Due-Diligence"
+VIDEO_CSS = """
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,400&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#0b0b0b;overflow:hidden;font-family:'Inter',sans-serif;}
+.wrap{position:relative;width:100%;height:100vh;overflow:hidden;background:#111 center/cover no-repeat;}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.shade{position:absolute;inset:0;}
+.inner{position:absolute;z-index:2;color:#fff;animation:rise 1.6s ease-out both;}
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.eyebrow{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#d6d6d6;margin-bottom:14px;}
+h1{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:clamp(56px,9vw,124px);line-height:.95;margin:0 0 18px;}
+.lead{font-weight:300;font-size:17px;line-height:1.65;color:#e8e8e8;max-width:600px;}
+.cta{display:inline-block;margin-top:26px;padding:13px 26px;border:1px solid #fff;color:#fff;background:transparent;
+     font:400 11px 'Inter',sans-serif;letter-spacing:.22em;text-transform:uppercase;cursor:pointer;transition:all .3s;}
+.cta:hover{background:#fff;color:#000;}
+blockquote{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(26px,3.4vw,44px);margin:0 0 14px;}
+cite{font-style:normal;font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:#d6d6d6;}
+</style>"""
+
+
+def video_block(video: str, poster: str, inner_html: str, shade: str, inner_css: str, height: int) -> None:
+    has_video = (ROOT / "static" / video).exists()
+    poster_b64 = img_b64(poster)
+    poster_attr = f'poster="data:image/jpeg;base64,{poster_b64}"' if poster_b64 else ""
+    bg = f"background-image:url('data:image/jpeg;base64,{poster_b64}')" if poster_b64 else ""
+    video_tag = (f'<video autoplay muted loop playsinline preload="auto" {poster_attr}>'
+                 f'<source src="https://cdn.jsdelivr.net/gh/{GITHUB_REPO}@main/static/{video}" type="video/mp4">'
+                 f'<source src="app/static/{video}" type="video/mp4"></video>') if has_video else ""
+    components.html(f"""{VIDEO_CSS}
+<div class="wrap" style="{bg}">{video_tag}
+  <div class="shade" style="background:{shade}"></div>
+  <div class="inner" style="{inner_css}">{inner_html}</div>
+</div>
+<script>
+  const v = document.querySelector('video');
+  if (v) {{ v.muted = true; v.play().catch(() => {{}}); }}
+  function goTool() {{
+    const el = window.parent.document.getElementById('analysis');
+    if (el) el.scrollIntoView({{behavior: 'smooth'}});
+  }}
+</script>""", height=height)
+
+
+# ----------------------------------------------------------------------------
 # 4. Page
 # ----------------------------------------------------------------------------
 st.markdown(CSS, unsafe_allow_html=True)
@@ -392,17 +614,20 @@ bar_l, bar_r = st.columns([5, 1])
 bar_l.markdown('<div class="brand">Tenzing</div>', unsafe_allow_html=True)
 lang = bar_r.radio("Language", ["FR", "EN"], horizontal=True, label_visibility="collapsed").lower()
 t = T[lang]
+for _img in ("hero.jpg", "ridge.jpg"):
+    if not find_image(_img):
+        st.warning(f"Image introuvable : {_img}. Ajoutez-la dans le dossier assets/ du dépôt GitHub.")
+for _vid in ("hero.mp4", "ridge.mp4"):
+    if not (ROOT / "static" / _vid).exists():
+        st.warning(f"Vidéo introuvable : static/{_vid}. Ajoutez-la dans le dossier static/ du dépôt GitHub.")
 
-# Hero
-st.markdown(f"""
-<div class="hero" style="background-image:url(data:image/jpeg;base64,{img_b64('hero.jpg')})">
-  <div class="hero-inner">
-    <div class="eyebrow">{t['eyebrow']}</div>
-    <h1>Tenzing</h1>
-    <div class="lead">{t['lead']}</div>
-    <a class="cta" href="#analysis">{t['cta']}</a>
-  </div>
-</div>""", unsafe_allow_html=True)
+# Hero (video)
+video_block("hero.mp4", "hero_poster.jpg",
+            f"""<div class="eyebrow">{t['eyebrow']}</div><h1>Tenzing</h1>
+            <div class="lead">{t['lead']}</div>
+            <button class="cta" onclick="goTool()">{t['cta']}</button>""",
+            "linear-gradient(180deg,rgba(11,11,11,0) 0%,rgba(11,11,11,.08) 40%,rgba(11,11,11,.78) 80%,#0b0b0b 100%)",
+            "left:6%;right:6%;bottom:9%;max-width:860px;", 700)
 
 # Method
 st.markdown(f'<div class="section-label">{t["method"]}</div>', unsafe_allow_html=True)
@@ -410,11 +635,12 @@ for col, (num, title, text) in zip(st.columns(3, gap="large"), t["steps"]):
     col.markdown(f'<div class="step"><div class="num">{num}</div><h3>{title}</h3><p>{text}</p></div>',
                  unsafe_allow_html=True)
 
-# Quote band
-st.markdown(f"""
-<div class="band" style="background-image:url(data:image/jpeg;base64,{img_b64('ridge.jpg')})">
-  <div><blockquote>« {t['quote']} »</blockquote><cite>{t['quote_by']}</cite></div>
-</div>""", unsafe_allow_html=True)
+# Quote band (video)
+st.markdown("<div style='height:4rem'></div>", unsafe_allow_html=True)
+video_block("ridge.mp4", "ridge.jpg",
+            f"""<blockquote>« {t['quote']} »</blockquote><cite>{t['quote_by']}</cite>""",
+            "linear-gradient(180deg,#0b0b0b 0%,rgba(11,11,11,.30) 22%,rgba(11,11,11,.42) 78%,#0b0b0b 100%)",
+            "left:8%;right:8%;top:50%;transform:translateY(-50%);text-align:center;animation:none;", 480)
 
 # Tool
 st.markdown(f'<div id="analysis" class="section-label">{t["tool"]}</div>', unsafe_allow_html=True)
@@ -475,7 +701,8 @@ if results:
             progress.empty()
             st.error(f"{t['err_engine']} {provider} : {e}")
             st.stop()
-        st.session_state.update(memo=memo, news=news)
+        st.session_state.update(memo=memo, news=news, memo_profile=profile, memo_lang=lang,
+                                memo_pdf=None)
     if st.session_state.get("memo"):
         progress.markdown(climb_html(t, 4), unsafe_allow_html=True)
     if not api_key:
@@ -484,8 +711,20 @@ if results:
 if st.session_state.get("memo"):
     st.markdown(f'<div class="memo-head">{t["memo"]}</div>', unsafe_allow_html=True)
     st.markdown(st.session_state["memo"])
-    st.download_button(t["download"], st.session_state["memo"],
-                       file_name=f"tenzing_memo_{date.today().isoformat()}.md")
+    if not st.session_state.get("memo_pdf"):
+        try:
+            st.session_state["memo_pdf"] = build_pdf(st.session_state["memo"],
+                                                     st.session_state.get("memo_profile", {}),
+                                                     T[st.session_state.get("memo_lang", lang)])
+        except Exception as e:  # never block the memo because of the PDF
+            st.caption(f"PDF indisponible : {e}")
+    stem = re.sub(r"[^A-Za-z0-9]+", "_", str(st.session_state.get("memo_profile", {}).get("Dénomination") or "memo"))
+    b1, b2, _ = st.columns([1.2, 1, 2])
+    if st.session_state.get("memo_pdf"):
+        b1.download_button(t["download_pdf"], st.session_state["memo_pdf"], mime="application/pdf",
+                           file_name=f"Tenzing_{stem}_{date.today().isoformat()}.pdf")
+    b2.download_button(t["download"], st.session_state["memo"],
+                       file_name=f"Tenzing_{stem}_{date.today().isoformat()}.md")
     with st.expander(t["press"]):
         for n in st.session_state.get("news", []):
             st.markdown(f"- [{n['titre']}]({n['lien']}) — {n['source']}, {n['date']}")

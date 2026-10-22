@@ -2,7 +2,7 @@
 Tenzing
 From a French startup name to a one-page investment memo, using public sources only.
 Sources: API Recherche d'entreprises (SIRENE, data.gouv.fr), company website, Google News RSS.
-LLM: Mistral AI (default, free Experiment plan) or Anthropic Claude.
+LLM: Groq
 """
 
 import time
@@ -15,9 +15,20 @@ from bs4 import BeautifulSoup
 
 SIRENE_API = "https://recherche-entreprises.api.gouv.fr/search"
 NEWS_RSS = "https://news.google.com/rss/search"
-MISTRAL_API = "https://api.mistral.ai/v1/chat/completions"
-# Free plan limits are set per model: try the lightest model first, then fall back.
-MISTRAL_MODELS = ["mistral-small-latest", "mistral-medium-latest"]
+# OpenAI-compatible providers. Free plans limit each model separately,
+# so each provider lists models to try in order.
+PROVIDERS = {
+    "Groq": {
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "secret": "GROQ_API_KEY",
+        "models": ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+    },
+    "Mistral": {
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "secret": "MISTRAL_API_KEY",
+        "models": ["mistral-small-latest", "mistral-medium-latest"],
+    },
+}
 CLAUDE_MODEL = "claude-sonnet-5-5"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Tenzing - educational project)"}
 
@@ -161,14 +172,15 @@ def build_context(profile: dict, website: str, news: list[dict]) -> str:
 def generate_memo(provider: str, api_key: str, context: str, language: str) -> str:
     system = SYSTEM_PROMPT + f"\nLangue de rédaction : {language}."
     user = f"Sources disponibles :\n\n{context}\n\nRédige la note."
-    if provider == "Mistral":
+    if provider in PROVIDERS:
+        conf = PROVIDERS[provider]
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         last = None
-        for model in MISTRAL_MODELS:
+        for model in conf["models"]:
             payload = {"model": model, "max_tokens": 1800, "temperature": 0.2, "messages": messages}
             for wait in (8, None):  # one automatic retry per model on 429
-                r = requests.post(MISTRAL_API, headers=headers, json=payload, timeout=120)
+                r = requests.post(conf["url"], headers=headers, json=payload, timeout=120)
                 last = r
                 if r.status_code == 200:
                     return r.json()["choices"][0]["message"]["content"]
@@ -178,9 +190,9 @@ def generate_memo(provider: str, api_key: str, context: str, language: str) -> s
             if r.status_code not in (429, 400, 404):  # auth or server error: no point trying another model
                 break
         if last is not None and last.status_code == 429:
-            raise RuntimeError("le quota gratuit de Mistral est atteint pour tous les modèles testés "
-                               f"({', '.join(MISTRAL_MODELS)}). Vérifie tes limites dans la console Mistral.")
-        raise RuntimeError(f"Mistral {last.status_code} : {last.text[:300]}")
+            raise RuntimeError(f"le quota gratuit de {provider} est atteint pour tous les modèles testés "
+                               f"({', '.join(conf['models'])}). Réessaie plus tard ou change de moteur.")
+        raise RuntimeError(f"{provider} {last.status_code} : {last.text[:300]}")
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(model=CLAUDE_MODEL, max_tokens=2500, system=system,
@@ -193,9 +205,9 @@ def generate_memo(provider: str, api_key: str, context: str, language: str) -> s
 # ----------------------------------------------------------------------------
 with st.sidebar:
     st.header("Paramètres")
-    provider = st.radio("Moteur d'analyse", ["Mistral", "Claude"], horizontal=True,
-                        help="Mistral : offre gratuite (Experiment). Claude : payant.")
-    secret_name = "MISTRAL_API_KEY" if provider == "Mistral" else "ANTHROPIC_API_KEY"
+    provider = st.radio("Moteur d'analyse", ["Groq", "Mistral", "Claude"], horizontal=True,
+                        help="Groq et Mistral : offres gratuites. Claude : payant.")
+    secret_name = PROVIDERS[provider]["secret"] if provider in PROVIDERS else "ANTHROPIC_API_KEY"
     try:
         secret_key = st.secrets.get(secret_name, "")
     except Exception:  # no secrets file locally
@@ -204,7 +216,7 @@ with st.sidebar:
                                           help="Utilisée uniquement pour cette session, jamais stockée.")
     language = st.radio("Langue de la note", ["français", "English"], horizontal=True)
     st.divider()
-    st.caption("Sources : SIRENE (data.gouv.fr), site web, Google News. Moteur : Mistral AI ou Claude. "
+    st.caption("Sources : SIRENE (data.gouv.fr), site web, Google News. Moteur : Groq, Mistral AI ou Claude. "
                "Outil pédagogique, ne constitue pas un conseil en investissement.")
 
 st.title("🏔️ Tenzing")

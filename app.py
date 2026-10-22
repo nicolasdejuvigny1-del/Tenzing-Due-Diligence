@@ -16,7 +16,8 @@ from bs4 import BeautifulSoup
 SIRENE_API = "https://recherche-entreprises.api.gouv.fr/search"
 NEWS_RSS = "https://news.google.com/rss/search"
 MISTRAL_API = "https://api.mistral.ai/v1/chat/completions"
-MISTRAL_MODEL = "mistral-medium-latest"
+# Free plan limits are set per model: try the lightest model first, then fall back.
+MISTRAL_MODELS = ["mistral-small-latest", "mistral-medium-latest"]
 CLAUDE_MODEL = "claude-sonnet-5-5"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Tenzing - educational project)"}
 
@@ -161,22 +162,25 @@ def generate_memo(provider: str, api_key: str, context: str, language: str) -> s
     system = SYSTEM_PROMPT + f"\nLangue de rédaction : {language}."
     user = f"Sources disponibles :\n\n{context}\n\nRédige la note."
     if provider == "Mistral":
-        payload = {"model": MISTRAL_MODEL, "max_tokens": 1800, "temperature": 0.2,
-                   "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        # Free plan = low rate limits: retry automatically on 429 with increasing waits.
-        for wait in (5, 15, 30, None):
-            r = requests.post(MISTRAL_API, headers=headers, json=payload, timeout=120)
-            if r.status_code == 200:
-                return r.json()["choices"][0]["message"]["content"]
-            if r.status_code != 429 or wait is None:
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        last = None
+        for model in MISTRAL_MODELS:
+            payload = {"model": model, "max_tokens": 1800, "temperature": 0.2, "messages": messages}
+            for wait in (8, None):  # one automatic retry per model on 429
+                r = requests.post(MISTRAL_API, headers=headers, json=payload, timeout=120)
+                last = r
+                if r.status_code == 200:
+                    return r.json()["choices"][0]["message"]["content"]
+                if r.status_code != 429 or wait is None:
+                    break
+                time.sleep(wait)
+            if r.status_code not in (429, 400, 404):  # auth or server error: no point trying another model
                 break
-            retry_after = r.headers.get("Retry-After")
-            time.sleep(int(retry_after) if retry_after and retry_after.isdigit() else wait)
-        if r.status_code == 429:
-            raise RuntimeError("le quota gratuit de Mistral est momentanément atteint. "
-                               "Patiente une minute, puis relance la génération.")
-        raise RuntimeError(f"Mistral {r.status_code} : {r.text[:300]}")
+        if last is not None and last.status_code == 429:
+            raise RuntimeError("le quota gratuit de Mistral est atteint pour tous les modèles testés "
+                               f"({', '.join(MISTRAL_MODELS)}). Vérifie tes limites dans la console Mistral.")
+        raise RuntimeError(f"Mistral {last.status_code} : {last.text[:300]}")
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(model=CLAUDE_MODEL, max_tokens=2500, system=system,
